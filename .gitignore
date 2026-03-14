@@ -1,0 +1,17 @@
+.vs/
+.vscode/
+bin/
+bin-int/
+*.sln
+*.vcxproj*
+
+*.fontcache
+*.shadercache
+
+.DS_Store
+
+*.xcworkspace/
+*.xcodeproj/
+*.log
+*.ini
+Makefile
