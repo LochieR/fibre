@@ -38,7 +38,7 @@ namespace fibre {
     {
         m_InputTexture = m_Input->asTexture2D();
 
-        m_MipCount = std::max(utils::getMipCount(width, height), 7u);
+        m_MipCount = std::min(utils::getMipCount(width, height), 7u);
 
         wire::FramebufferDesc framebufferDesc{};
         framebufferDesc.Format = wire::AttachmentFormat::RGBA32_SFloat;
@@ -185,12 +185,12 @@ namespace fibre {
 
         m_UpsampleResources->update(m_Sampler, 0, 0);
 
-        m_UpsampleImageResources.resize(m_MipCount);
+        m_UpsampleImageResources.resize(m_MipCount - 1);
 
-        for (uint32_t i = 0; i < m_MipCount; i++)
+        for (uint32_t i = 0; i < m_MipCount - 1; i++)
         {
             m_UpsampleImageResources[i] = device->createShaderResource(1, m_UpsampleLayout, "Bloom::m_UpsampleImageResources");
-            m_UpsampleImageResources[i]->update(m_Intermediate, 0, 0, i + 1);
+            m_UpsampleImageResources[i]->update(m_IntermediateTexture, 0, 0, i + 1);
             m_UpsampleImageResources[i]->update(m_Intermediate, 1, 0, i);
         }
     }
@@ -225,12 +225,12 @@ namespace fibre {
             lastMipSize = utils::getMipSize(m_Width, m_Height, i);
         }
 
-        commandList.imageMemoryBarrier(m_Intermediate, wire::AttachmentLayout::ShaderReadOnly, wire::AttachmentLayout::General, 0, m_MipCount);
+        commandList.imageMemoryBarrier(m_Intermediate, wire::AttachmentLayout::ShaderReadOnly, wire::AttachmentLayout::General, 0, m_MipCount - 1);
 
         commandList.bindPipeline(m_UpsamplePipeline);
         commandList.bindShaderResource(0, m_UpsampleResources);
 
-        for (uint32_t i = m_MipCount - 1; i > 0; i--)
+        for (uint32_t i = m_MipCount - 2; i > 0; i--)
         {
             UpsamplePushConstants pushConstants{
                 .InputSize = utils::getMipSize(m_Width, m_Height, i),
@@ -238,14 +238,14 @@ namespace fibre {
                 .BloomStrength = 1.0f
             };
 
-            commandList.imageMemoryBarrier(m_Intermediate, wire::AttachmentLayout::General, wire::AttachmentLayout::ShaderReadOnly, i, 1);
+            commandList.imageMemoryBarrier(m_Intermediate, wire::AttachmentLayout::General, wire::AttachmentLayout::ShaderReadOnly, i + 1, 1);
             commandList.pushConstants(wire::ShaderType::Compute, pushConstants);
             commandList.bindShaderResource(1, m_UpsampleImageResources[i]);
 
             commandList.dispatch(groupCountX, groupCountY, 1);
         }
 
-        commandList.imageMemoryBarrier(m_Intermediate, wire::AttachmentLayout::ShaderReadOnly, wire::AttachmentLayout::General, 0, m_MipCount - 1);
+        commandList.imageMemoryBarrier(m_Intermediate, wire::AttachmentLayout::ShaderReadOnly, wire::AttachmentLayout::General, 2, m_MipCount - 3);
     }
 
 }
