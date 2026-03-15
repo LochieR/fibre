@@ -1,12 +1,12 @@
 #pragma pack_matrix(column_major)
 
 [[vk::binding(0, 0)]]
-Texture2D<float4> u_Input;
-
-[[vk::binding(1, 0)]]
 SamplerState u_Sampler;
 
 [[vk::binding(0, 1)]]
+Texture2D<float4> u_Input;
+
+[[vk::binding(1, 1)]]
 RWTexture2D<float4> u_Output;
 
 [[vk::push_constant]]

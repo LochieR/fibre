@@ -60,6 +60,13 @@ namespace wire {
         Transfer = 1 << 12
     };
 
+    struct CommandDebugInfo
+    {
+        const char* File;
+        int Line;
+        const char* Function;
+    };
+
     struct CommandEntry
     {
     private:
@@ -212,6 +219,10 @@ namespace wire {
             ImageMemoryBarrierArgs,
             NativeCommandArgs
         > Args;
+
+#ifdef WR_DEBUG
+        CommandDebugInfo DebugInfo;
+#endif
     };
 
     struct CommandScope
@@ -224,6 +235,14 @@ namespace wire {
     };
 
     class Device;
+
+#ifdef WR_DEBUG
+#define CMD_LIST_DEBUG_ARG , const CommandDebugInfo& debugInfo
+#define WR_DEBUG_ENABLE ::wire::CommandDebugInfo{ __FILE__, __LINE__, __FUNCTION__ }
+#else
+#define CMD_LIST_DEBUG_ARG
+#define WR_DEBUG_ENABLE
+#endif
 
     class CommandList
     {
@@ -264,6 +283,34 @@ namespace wire {
 
         void submitNativeCommand(std::shared_ptr<CommandListNativeCommand> nativeCommand, std::type_index typeIndex);
 
+#ifdef WR_DEBUG
+        void bindPipeline(const std::shared_ptr<GraphicsPipeline>& pipeline CMD_LIST_DEBUG_ARG);
+        void bindPipeline(const std::shared_ptr<ComputePipeline>& pipeline CMD_LIST_DEBUG_ARG);
+        void pushConstants(ShaderType shaderStage, const void* data, size_t size CMD_LIST_DEBUG_ARG, size_t offset = 0);
+        void bindShaderResource(uint32_t set, const std::shared_ptr<ShaderResource>& resource CMD_LIST_DEBUG_ARG);
+
+        void setViewport(const glm::vec2& position, const glm::vec2& size, float minDepth, float maxDepth CMD_LIST_DEBUG_ARG);
+        void setScissor(const glm::vec2& min, const glm::vec2& max CMD_LIST_DEBUG_ARG);
+        void setLineWidth(float lineWidth CMD_LIST_DEBUG_ARG);
+
+        void bindVertexBuffers(const std::vector<std::shared_ptr<Buffer>>& vertexBuffers CMD_LIST_DEBUG_ARG);
+        void bindIndexBuffer(const std::shared_ptr<Buffer>& indexBuffer CMD_LIST_DEBUG_ARG);
+        
+        void draw(uint32_t vertexCount CMD_LIST_DEBUG_ARG, uint32_t vertexOffset = 0);
+        void drawIndexed(uint32_t indexCount CMD_LIST_DEBUG_ARG, uint32_t vertexOffset = 0, uint32_t indexOffset = 0);
+
+        void dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ CMD_LIST_DEBUG_ARG);
+
+        void clearImage(const std::shared_ptr<Framebuffer>& framebuffer, const glm::vec4& color, AttachmentLayout currentLayout CMD_LIST_DEBUG_ARG, uint32_t baseMip = 0, uint32_t numMips = 1);
+
+        void copyBuffer(const std::shared_ptr<Buffer>& srcBuffer, const std::shared_ptr<Buffer>& dstBuffer, size_t size CMD_LIST_DEBUG_ARG, size_t srcOffset = 0, size_t dstOffset = 0);
+        void bufferMemoryBarrier(const std::shared_ptr<Buffer>& buffer, BarrierMask waitFor, BarrierMask access, PipelineStage waitStage, PipelineStage untilStage CMD_LIST_DEBUG_ARG);
+
+        void imageMemoryBarrier(const std::shared_ptr<Framebuffer>& framebuffer, AttachmentLayout oldLayout, AttachmentLayout newLayout CMD_LIST_DEBUG_ARG, uint32_t baseMip = 0, uint32_t numMips = 1);
+
+        void submitNativeCommand(std::shared_ptr<CommandListNativeCommand> nativeCommand, std::type_index typeIndex CMD_LIST_DEBUG_ARG);
+#endif
+
         bool isRecording() const { return m_IsRecording; }
         bool isSingleTimeCommands() const { return m_SingleTimeCommands; }
         
@@ -276,6 +323,14 @@ namespace wire {
         {
             pushConstants(shaderStage, &value, sizeof(T), offset);
         }
+
+#ifdef WR_DEBUG
+        template<typename T>
+        void pushConstants(ShaderType shaderStage, const T& value CMD_LIST_DEBUG_ARG, size_t offset = 0)
+        {
+            pushConstants(shaderStage, &value, sizeof(T), debugInfo, offset);
+        }
+#endif
     private:
         Device* m_Device;
 

@@ -131,7 +131,7 @@ project "wire"
         "GLFW",
 		"portaudio",
 		"imgui",
-        "vulkan"
+        "%{Library.Vulkan}"
     }
 
     filter "system:windows"
@@ -151,6 +151,11 @@ project "wire"
 		libdirs
 		{
 			"%{LibraryDir.Vulkan}"
+		}
+
+		links
+		{
+			"vulkan"
 		}
 
     filter "configurations:Debug"

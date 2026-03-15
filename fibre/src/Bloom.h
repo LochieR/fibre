@@ -26,7 +26,7 @@ namespace fibre {
         std::shared_ptr<wire::ComputePipeline> m_DownsamplePipeline;
         std::shared_ptr<wire::ShaderResourceLayout> m_DownsampleLayout;
         std::shared_ptr<wire::ShaderResource> m_DownsampleResources;
-        std::vector<std::shared_ptr<wire::ShaderResource>> m_DownsampleOutputResources;
+        std::vector<std::shared_ptr<wire::ShaderResource>> m_DownsampleImageResources;
     };
 
 }
