@@ -138,6 +138,7 @@ namespace fibre {
         commandList.bindShaderResource(0, m_DownsampleResources);
 
         commandList.imageMemoryBarrier(m_Intermediate, wire::AttachmentLayout::Undefined, wire::AttachmentLayout::General, 0, m_MipCount);
+        commandList.clearImage(m_Intermediate, { 0.0f, 0.0f, 0.0f, 0.0f }, wire::AttachmentLayout::General, 0, m_MipCount);
 
         glm::vec2 lastMipSize = { (float)m_Width, (float)m_Height };
         for (uint32_t i = 0; i < m_MipCount - 1; i++)
