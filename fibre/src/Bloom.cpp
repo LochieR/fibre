@@ -26,6 +26,13 @@ namespace fibre {
         float Threshold;
     };
 
+    struct UpsamplePushConstants
+    {
+        glm::vec2 InputSize;
+        glm::vec2 OutputSize;
+        float BloomStrength;
+    };
+
     Bloom::Bloom(const std::shared_ptr<wire::Device>& device, const std::shared_ptr<wire::Framebuffer>& image, uint32_t width, uint32_t height)
         : m_Device(device), m_Input(image), m_Width(width), m_Height(height)
     {
@@ -116,15 +123,75 @@ namespace fibre {
 
         m_DownsampleImageResources.resize(m_MipCount);
 
-        m_DownsampleImageResources[0] = device->createShaderResource(1, m_DownsampleLayout, "Bloom::m_DownsampleOutputResources");
+        m_DownsampleImageResources[0] = device->createShaderResource(1, m_DownsampleLayout, "Bloom::m_DownsampleInputResources");
         m_DownsampleImageResources[0]->update(m_InputTexture, 0, 0);
         m_DownsampleImageResources[0]->update(m_Intermediate, 1, 0, 0);
 
         for (uint32_t i = 1; i < m_MipCount - 1; i++)
         {
-            m_DownsampleImageResources[i] = device->createShaderResource(1, m_DownsampleLayout, "Bloom::m_DownsampleOutputResources");
+            m_DownsampleImageResources[i] = device->createShaderResource(1, m_DownsampleLayout, "Bloom::m_DownsampleInputResources");
             m_DownsampleImageResources[i]->update(m_IntermediateTexture, 0, 0, i - 1);
             m_DownsampleImageResources[i]->update(m_Intermediate, 1, 0, i);
+        }
+
+        wire::ShaderResourceLayoutInfo upsampleLayout{};
+        upsampleLayout.Sets = {
+            wire::ShaderResourceSetInfo{
+                .Resources = {
+                    wire::ShaderResourceInfo{
+                        .Binding = 0,
+                        .Type = wire::ShaderResourceType::Sampler,
+                        .ArrayCount = 1,
+                        .Stage = wire::ShaderType::Compute
+                    }
+                }
+            },
+            wire::ShaderResourceSetInfo{
+                .Resources = {
+                    wire::ShaderResourceInfo{
+                        .Binding = 0,
+                        .Type = wire::ShaderResourceType::SampledImage,
+                        .ArrayCount = 1,
+                        .Stage = wire::ShaderType::Compute
+                    },
+                    wire::ShaderResourceInfo{
+                        .Binding = 1,
+                        .Type = wire::ShaderResourceType::StorageImage,
+                        .ArrayCount = 1,
+                        .Stage = wire::ShaderType::Compute
+                    }
+                }
+            }
+        };
+
+        m_UpsampleLayout = device->createShaderResourceLayout(upsampleLayout, "Bloom::m_UpsampleLayout");
+
+        wire::ComputeInputLayout upsampleInputLayout{};
+        upsampleInputLayout.ResourceLayout = m_UpsampleLayout;
+        upsampleInputLayout.PushConstantInfos = {
+            wire::PushConstantInfo{
+                .Size = sizeof(UpsamplePushConstants),
+                .Offset = 0,
+                .Shader = wire::ShaderType::Compute
+            }
+        };
+
+        wire::ComputePipelineDesc upsamplePipelineInfo{};
+        upsamplePipelineInfo.Layout = upsampleInputLayout;
+        upsamplePipelineInfo.ShaderPath = "shadercache://upsample.compute.hlsl";
+
+        m_UpsamplePipeline = device->createComputePipeline(upsamplePipelineInfo, "Bloom::m_UpsamplePipeline");
+        m_UpsampleResources = device->createShaderResource(0, m_UpsampleLayout, "Bloom::m_UpsampleResources");
+
+        m_UpsampleResources->update(m_Sampler, 0, 0);
+
+        m_UpsampleImageResources.resize(m_MipCount);
+
+        for (uint32_t i = 0; i < m_MipCount; i++)
+        {
+            m_UpsampleImageResources[i] = device->createShaderResource(1, m_UpsampleLayout, "Bloom::m_UpsampleImageResources");
+            m_UpsampleImageResources[i]->update(m_Intermediate, 0, 0, i + 1);
+            m_UpsampleImageResources[i]->update(m_Intermediate, 1, 0, i);
         }
     }
 
@@ -156,6 +223,26 @@ namespace fibre {
             commandList.imageMemoryBarrier(m_Intermediate, wire::AttachmentLayout::General, wire::AttachmentLayout::ShaderReadOnly, i, 1);
 
             lastMipSize = utils::getMipSize(m_Width, m_Height, i);
+        }
+
+        commandList.imageMemoryBarrier(m_Intermediate, wire::AttachmentLayout::ShaderReadOnly, wire::AttachmentLayout::General, 0, m_MipCount);
+
+        commandList.bindPipeline(m_UpsamplePipeline);
+        commandList.bindShaderResource(0, m_UpsampleResources);
+
+        for (uint32_t i = m_MipCount - 1; i > 0; i--)
+        {
+            UpsamplePushConstants pushConstants{
+                .InputSize = utils::getMipSize(m_Width, m_Height, i),
+                .OutputSize = utils::getMipSize(m_Width, m_Height, i - 1),
+                .BloomStrength = 1.0f
+            };
+
+            commandList.imageMemoryBarrier(m_Intermediate, wire::AttachmentLayout::General, wire::AttachmentLayout::ShaderReadOnly, i, 1);
+            commandList.pushConstants(wire::ShaderType::Compute, pushConstants);
+            commandList.bindShaderResource(1, m_UpsampleImageResources[i]);
+
+            commandList.dispatch(groupCountX, groupCountY, 1);
         }
 
         commandList.imageMemoryBarrier(m_Intermediate, wire::AttachmentLayout::ShaderReadOnly, wire::AttachmentLayout::General, 0, m_MipCount - 1);
